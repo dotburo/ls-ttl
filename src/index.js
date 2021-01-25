@@ -106,7 +106,7 @@ export default class Ls {
         let value = _STORAGE[get](key2);
 
         if (forget) {
-            this.delete(key2);
+            this.delete(key);
         }
 
         return value;
