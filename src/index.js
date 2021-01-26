@@ -1,10 +1,7 @@
-import {randomString} from "./helpers";
-
 const
     _STORAGE = window.localStorage,
     _KEY_PREFIX = 'ls-',
-    _TTL_SUFFIX = '-ls-ttl',
-    _KEYS = {};
+    _TTL_SUFFIX = '-ls-ttl';
 
 /**
  * Get the localStorage method name.
@@ -16,18 +13,7 @@ function _method(name) {
     return `${name}Item`;
 }
 
-/**
- * Return the matching key with the prefix.
- * @param {string} key
- * @param {string} prefix
- * @return {string}
- * @private
- */
-function _getKey(key, prefix = '') {
-    return prefix + (_KEYS[key] || key);
-}
-
-/** LocalStorage client with TTL and randomised keys. */
+/** LocalStorage client with TTL. */
 export default class Ls {
     constructor(options = {}) {
         this.options = {
@@ -44,7 +30,7 @@ export default class Ls {
      * @param {number} ttl      Time to live in seconds
      */
     set(key, value, ttl = 0) {
-        key = _getKey(key, this.options.keyPrefix);
+        key = this.makeKey(key);
 
         const set = _method('set');
 
@@ -60,38 +46,13 @@ export default class Ls {
     }
 
     /**
-     * Add an entry by randomising the key.
-     * @param {string} key
-     * @param {*} value         Number or string-convertible data
-     * @param {number} ttl      Time to live in seconds
-     * @return void
-     */
-    setWithRandomKey(key, value, ttl = 0) {
-        const key2 = _getKey(key, this.options.keyPrefix);
-        _KEYS[key] = key2 ? key2 : randomString(16);
-        return this.set(_KEYS[key], value, ttl);
-    }
-
-    /**
-     * Add an entry by encrypting the given key.
-     * @param {string} key
-     * @param {*} value         Number or string-convertible data
-     * @param {number} ttl      Time to live in seconds
-     * @return void
-     */
-    setWithEncryptedKey(key, value, ttl = 0) {
-        _KEYS[key] = this.options.encrypt ? this.options.encrypt(key) : btoa(key);
-        return this.set(_KEYS[key], value, ttl);
-    }
-
-    /**
      * Get a value from the persistent storage.
      * @param {string} key
      * @param {boolean} forget
      * @return {string|number}
      */
     get(key, forget = false) {
-        let key2 = _getKey(key, this.options.keyPrefix);
+        let key2 = this.makeKey(key);
 
         const get = _method('get'),
             isTTLKey = this.isTTLKey(key2),
@@ -113,6 +74,18 @@ export default class Ls {
     }
 
     /**
+     * Return the matching key with the prefix.
+     * @param {string} key
+     * @param {string} prefix
+     * @return {string}
+     * @private
+     */
+    makeKey(key, prefix = '') {
+        return this.options.keyPrefix
+            + (typeof this.options.encrypt === 'function' ? this.options.encrypt(key) : key);
+    }
+
+    /**
      * Check if given key is a TTL key.
      * @param {string} key
      * @return {boolean}
@@ -127,7 +100,7 @@ export default class Ls {
      * @return {number}
      */
     getTTL(key) {
-        key = _getKey(key, this.options.keyPrefix);
+        key = this.makeKey(key);
 
         let ttl = _STORAGE[_method('get')](key + this.options.ttlSuffix);
 
@@ -146,10 +119,9 @@ export default class Ls {
         const rm = _method('remove');
 
         keys.forEach(key => {
-            let k = _getKey(key, this.options.keyPrefix);
-            _STORAGE[rm](k);
-            _STORAGE[rm](k + this.options.ttlSuffix);
-            delete _KEYS[key];
+            key = this.makeKey(key);
+            _STORAGE[rm](key);
+            _STORAGE[rm](key + this.options.ttlSuffix);
         });
     }
 
