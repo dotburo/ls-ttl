@@ -11,10 +11,16 @@ Open your DevTools console & storage tab...
     let client = new Ls();
 
     client.set('hello1', 'world1', 60);
+    client.set('hello2', [1, 2, '3']);
+    client.set('hello3', 1);
+    client.set('hello4', null);
 
     console.log(
         client.get('hello1'),
         client.getTTL('hello1'),
+        client.get('hello2'),
+        client.get('hello3'),
+        client.get('hello4'),
     );
 </script>
 </body>

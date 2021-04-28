@@ -70,7 +70,11 @@ export default class Ls {
             this.delete(key);
         }
 
-        return value;
+        try {
+            return JSON.parse(value);
+        } catch (error) {
+            return value;
+        }
     }
 
     /**
