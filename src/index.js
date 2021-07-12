@@ -1,17 +1,7 @@
-const
-    _STORAGE = window.localStorage,
-    _KEY_PREFIX = 'ls-',
-    _TTL_SUFFIX = '-ls-ttl';
+import {getStorageMethod} from './helpers';
 
-/**
- * Get the localStorage method name.
- * @param {string} name
- * @return {string}
- * @private
- */
-function _method(name) {
-    return `${name}Item`;
-}
+const _KEY_PREFIX = 'ls-',
+    _TTL_SUFFIX = '-ls-ttl';
 
 /** LocalStorage client with TTL. */
 export default class Ls {
@@ -32,16 +22,14 @@ export default class Ls {
     set(key, value, ttl = 0) {
         key = this.makeKey(key);
 
-        const set = _method('set');
-
         if (value && typeof value !== 'string') {
             value = this._stringify(value);
         }
 
-        _STORAGE[set](key, value);
+        getStorageMethod('set')(key, value);
 
         if (ttl > 0) {
-            _STORAGE[set](key + this.options.ttlSuffix, (Date.now() + (ttl * 1000)).toString());
+            getStorageMethod('set')(key + this.options.ttlSuffix, (Date.now() + (ttl * 1000)).toString());
         }
     }
 
@@ -54,9 +42,8 @@ export default class Ls {
     get(key, forget = false) {
         let key2 = this.makeKey(key);
 
-        const get = _method('get'),
-            isTTLKey = this.isTTLKey(key2),
-            ttl = !isTTLKey ? this.getTTL(key) : parseInt(_STORAGE[get](key2), 10);
+        const isTTLKey = this.isTTLKey(key2),
+            ttl = !isTTLKey ? this.getTTL(key) : parseInt(getStorageMethod('get')(key2), 10);
 
         if (ttl && ttl < Date.now()) {
             key2 = isTTLKey ? key2.replace(this.options.ttlSuffix, '') : key2;
@@ -64,7 +51,7 @@ export default class Ls {
             return void 0;
         }
 
-        let value = _STORAGE[get](key2);
+        let value = getStorageMethod('get')(key2);
 
         if (forget) {
             this.delete(key);
@@ -106,7 +93,7 @@ export default class Ls {
     getTTL(key) {
         key = this.makeKey(key);
 
-        let ttl = _STORAGE[_method('get')](key + this.options.ttlSuffix);
+        let ttl = getStorageMethod('get')(key + this.options.ttlSuffix);
 
         if (!ttl) {
             return 0;
@@ -120,12 +107,12 @@ export default class Ls {
      * @param {string|string[]} keys
      */
     delete(...keys) {
-        const rm = _method('remove');
+        const rm = getStorageMethod('remove');
 
         keys.forEach(key => {
             key = this.makeKey(key);
-            _STORAGE[rm](key);
-            _STORAGE[rm](key + this.options.ttlSuffix);
+            rm(key);
+            rm(key + this.options.ttlSuffix);
         });
     }
 

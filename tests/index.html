@@ -22,6 +22,12 @@ Open your DevTools console & storage tab...
         client.get('hello3'),
         client.get('hello4'),
     );
+
+    client.delete('hello3');
+
+    if (client.get('hello3')) {
+        console.error('"hello3" should have been deleted!');
+    }
 </script>
 </body>
 </html>

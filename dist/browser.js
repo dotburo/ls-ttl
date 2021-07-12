@@ -1,52 +1,47 @@
 var Ls = (function () {
     'use strict';
 
+    const _IN_MEMORY_STORAGE = {};
+
     /**
-     * Create a random string.
-     * @param {number} length
-     * @return {string}
+     * Evaluate if the browser support usage of localStorage (eg. when Safari is set to block all cookies).
+     * @return {boolean}
      */
-    function randomString(length) {
-        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
-            charactersLength = characters.length;
-
-        let result = '';
-
-        for (let i = 0; i < length; i++) {
-            result += characters.charAt(Math.floor(Math.random() * charactersLength));
+    function checkSupport() {
+        try {
+            const key = '__random_tmp_key__';
+            window.localStorage.setItem(key, key);
+            window.localStorage.removeItem(key);
+            return true;
+        } catch (e) {
+            return false;
         }
-
-        return result;
     }
-
-    const
-        _STORAGE = window.localStorage,
-        _KEY_PREFIX = 'ls-',
-        _TTL_SUFFIX = '-ls-ttl',
-        _KEYS = {};
 
     /**
      * Get the localStorage method name.
      * @param {string} name
-     * @return {string}
-     * @private
+     * @return {function<*>}
      */
-    function _method(name) {
-        return `${name}Item`;
+    function getStorageMethod(name) {
+        if (checkSupport()) {
+            return window.localStorage[`${name}Item`].bind(window.localStorage)
+        }
+
+        switch (name) {
+            case 'get':
+                return (key) => _IN_MEMORY_STORAGE[key];
+            case 'set':
+                return (key, value) => _IN_MEMORY_STORAGE[key] = value;
+            case 'remove':
+                return (key) => delete _IN_MEMORY_STORAGE[key];
+        }
     }
 
-    /**
-     * Return the matching key with the prefix.
-     * @param {string} key
-     * @param {string} prefix
-     * @return {string}
-     * @private
-     */
-    function _getKey(key, prefix = '') {
-        return prefix + (_KEYS[key] || key);
-    }
+    const _KEY_PREFIX = 'ls-',
+        _TTL_SUFFIX = '-ls-ttl';
 
-    /** LocalStorage client with TTL and randomised keys. */
+    /** LocalStorage client with TTL. */
     class Ls {
         constructor(options = {}) {
             this.options = {
@@ -63,44 +58,17 @@ var Ls = (function () {
          * @param {number} ttl      Time to live in seconds
          */
         set(key, value, ttl = 0) {
-            key = _getKey(key, this.options.keyPrefix);
-
-            const set = _method('set');
+            key = this.makeKey(key);
 
             if (value && typeof value !== 'string') {
                 value = this._stringify(value);
             }
 
-            _STORAGE[set](key, value);
+            getStorageMethod('set')(key, value);
 
             if (ttl > 0) {
-                _STORAGE[set](key + this.options.ttlSuffix, (Date.now() + (ttl * 1000)).toString());
+                getStorageMethod('set')(key + this.options.ttlSuffix, (Date.now() + (ttl * 1000)).toString());
             }
-        }
-
-        /**
-         * Add an entry by randomising the key.
-         * @param {string} key
-         * @param {*} value         Number or string-convertible data
-         * @param {number} ttl      Time to live in seconds
-         * @return void
-         */
-        setWithRandomKey(key, value, ttl = 0) {
-            const key2 = _getKey(key, this.options.keyPrefix);
-            _KEYS[key] = key2 ? key2 : randomString(16);
-            return this.set(_KEYS[key], value, ttl);
-        }
-
-        /**
-         * Add an entry by encrypting the given key.
-         * @param {string} key
-         * @param {*} value         Number or string-convertible data
-         * @param {number} ttl      Time to live in seconds
-         * @return void
-         */
-        setWithEncryptedKey(key, value, ttl = 0) {
-            _KEYS[key] = this.options.encrypt ? this.options.encrypt(key) : btoa(key);
-            return this.set(_KEYS[key], value, ttl);
         }
 
         /**
@@ -110,11 +78,10 @@ var Ls = (function () {
          * @return {string|number}
          */
         get(key, forget = false) {
-            let key2 = _getKey(key, this.options.keyPrefix);
+            let key2 = this.makeKey(key);
 
-            const get = _method('get'),
-                isTTLKey = this.isTTLKey(key2),
-                ttl = !isTTLKey ? this.getTTL(key) : parseInt(_STORAGE[get](key2), 10);
+            const isTTLKey = this.isTTLKey(key2),
+                ttl = !isTTLKey ? this.getTTL(key) : parseInt(getStorageMethod('get')(key2), 10);
 
             if (ttl && ttl < Date.now()) {
                 key2 = isTTLKey ? key2.replace(this.options.ttlSuffix, '') : key2;
@@ -122,13 +89,29 @@ var Ls = (function () {
                 return void 0;
             }
 
-            let value = _STORAGE[get](key2);
+            let value = getStorageMethod('get')(key2);
 
             if (forget) {
-                this.delete(key2);
+                this.delete(key);
             }
 
-            return value;
+            try {
+                return JSON.parse(value);
+            } catch (error) {
+                return value;
+            }
+        }
+
+        /**
+         * Return the matching key with the prefix.
+         * @param {string} key
+         * @param {string} prefix
+         * @return {string}
+         * @private
+         */
+        makeKey(key, prefix = '') {
+            return this.options.keyPrefix
+                + (typeof this.options.encrypt === 'function' ? this.options.encrypt(key) : key);
         }
 
         /**
@@ -146,9 +129,9 @@ var Ls = (function () {
          * @return {number}
          */
         getTTL(key) {
-            key = _getKey(key, this.options.keyPrefix);
+            key = this.makeKey(key);
 
-            let ttl = _STORAGE[_method('get')](key + this.options.ttlSuffix);
+            let ttl = getStorageMethod('get')(key + this.options.ttlSuffix);
 
             if (!ttl) {
                 return 0;
@@ -162,13 +145,12 @@ var Ls = (function () {
          * @param {string|string[]} keys
          */
         delete(...keys) {
-            const rm = _method('remove');
+            const rm = getStorageMethod('remove');
 
             keys.forEach(key => {
-                let k = _getKey(key, this.options.keyPrefix);
-                _STORAGE[rm](k);
-                _STORAGE[rm](k + this.options.ttlSuffix);
-                delete _KEYS[key];
+                key = this.makeKey(key);
+                rm(key);
+                rm(key + this.options.ttlSuffix);
             });
         }
 
